@@ -3,10 +3,12 @@ import bcrypt from 'bcryptjs'
 
 const userSchema = new mongoose.Schema(
   {
-    name: { type: String, required: true, trim: true, maxlength: 60 },
+    firstName: { type: String, required: true, trim: true, maxlength: 30 },
+    lastName: { type: String, required: true, trim: true, maxlength: 30 },
     email: { type: String, required: true, unique: true, lowercase: true, trim: true },
     password: { type: String, required: true, minlength: 8, select: false },
     role: { type: String, enum: ['user', 'admin'], default: 'user' },
+    profilePicture: { type: String, default: null },
     lastLoginAt: { type: Date },
   },
   { timestamps: true }

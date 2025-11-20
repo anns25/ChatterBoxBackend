@@ -11,30 +11,31 @@ export const searchUsers = async (req, res, next) => {
       const allUsers = await User.find({
         _id: { $ne: currentUserId }, // Exclude current user
       })
-        .select('-password') // Exclude password
+        .select('firstName lastName email role profilePicture _id') // Explicitly select fields
         .limit(50) // Limit results to 50
-        .sort({ name: 1 }) // Sort alphabetically by name
+        .sort({ firstName: 1, lastName: 1 }) // Sort alphabetically by name
 
       return res.json(allUsers)
     }
 
     const searchQuery = q.trim()
 
-    // Search by name or email (case-insensitive)
+    // Search by firstName, lastName, or email (case-insensitive)
     const users = await User.find({
       $and: [
         { _id: { $ne: currentUserId } }, // Exclude current user
         {
           $or: [
-            { name: { $regex: searchQuery, $options: 'i' } },
+            { firstName: { $regex: searchQuery, $options: 'i' } },
+            { lastName: { $regex: searchQuery, $options: 'i' } },
             { email: { $regex: searchQuery, $options: 'i' } },
           ],
         },
       ],
     })
-      .select('-password') // Exclude password
+      .select('firstName lastName email role profilePicture _id') // Explicitly select fields
       .limit(20) // Limit results to 20
-      .sort({ name: 1 }) // Sort alphabetically by name
+      .sort({ firstName: 1, lastName: 1 }) // Sort alphabetically by name
 
     res.json(users)
   } catch (err) {
@@ -54,9 +55,11 @@ export const getUserById = async (req, res, next) => {
 
     res.json({
       _id: user._id,
-      name: user.name,
+      firstName: user.firstName,
+      lastName: user.lastName,
       email: user.email,
       role: user.role,
+      profilePicture: user.profilePicture,
       createdAt: user.createdAt,
       lastLoginAt: user.lastLoginAt,
     })
@@ -67,7 +70,7 @@ export const getUserById = async (req, res, next) => {
 
 export const updateProfile = async (req, res, next) => {
   try {
-    const { name, email } = req.body
+    const { firstName, lastName, email } = req.body
     const userId = req.user._id
 
     // Check if email is being changed and if it's already taken
@@ -80,15 +83,17 @@ export const updateProfile = async (req, res, next) => {
 
     const updatedUser = await User.findByIdAndUpdate(
       userId,
-      { name, email },
+      { firstName, lastName, email },
       { new: true, runValidators: true }
     ).select('-password')
 
     res.json({
       _id: updatedUser._id,
-      name: updatedUser.name,
+      firstName: updatedUser.firstName, // Fixed: was updatedUser.name
+      lastName: updatedUser.lastName,
       email: updatedUser.email,
       role: updatedUser.role,
+      profilePicture: updatedUser.profilePicture,
       createdAt: updatedUser.createdAt,
       lastLoginAt: updatedUser.lastLoginAt,
     })

@@ -39,7 +39,7 @@ export const initializeSocket = (server) => {
   })
 
   io.on('connection', (socket) => {
-    console.log(`✅ User connected: ${socket.user.name} (${socket.userId})`)
+    console.log(`✅ User connected: ${socket.user.firstName} ${socket.user.lastName} (${socket.userId})`)
 
     // Emit user online status to all clients
     socket.broadcast.emit('userOnline', socket.userId)
@@ -92,7 +92,7 @@ export const initializeSocket = (server) => {
         })
 
         // Populate message with sender info
-        await message.populate('sender', 'name email')
+        await message.populate('sender', 'firstName lastName email')
 
         // Update chat's last message and timestamp
         await Chat.findByIdAndUpdate(chatId, {
@@ -104,7 +104,7 @@ export const initializeSocket = (server) => {
               const messageToSend = {
                 _id: message._id.toString(),
                 sender: message.sender._id.toString(),
-                senderName: message.sender.name,
+                senderName: `${message.sender.firstName} ${message.sender.lastName}`,
                 senderEmail: message.sender.email,
                 content: message.content,
                 timestamp: message.createdAt,
@@ -136,7 +136,7 @@ export const initializeSocket = (server) => {
 
     // Handle disconnection
     socket.on('disconnect', () => {
-      console.log(`❌ User disconnected: ${socket.user.name} (${socket.userId})`)
+      console.log(`❌ User disconnected: ${socket.user.firstName} ${socket.user.lastName} (${socket.userId})`)
       // Emit user offline status
       socket.broadcast.emit('userOffline', socket.userId)
     })

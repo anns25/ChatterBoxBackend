@@ -13,7 +13,7 @@ const handleValidationErrors = (req) => {
 export const register = async (req, res, next) => {
   try {
     handleValidationErrors(req)
-    const { name, email, password, role, adminCode } = req.body
+    const { firstName, lastName, email, password, role, adminCode } = req.body
 
     if (role === 'admin') {
       const requiredCode = process.env.ADMIN_SIGNUP_CODE
@@ -25,13 +25,13 @@ export const register = async (req, res, next) => {
     const existing = await User.findOne({ email })
     if (existing) throw createHttpError(409, 'Email already registered')
 
-    const user = await User.create({ name, email, password, role })
+    const user = await User.create({ firstName, lastName, email, password, role })
     const token = generateToken(user._id, user.role)
 
     res.status(201).json({
       message: 'Registration successful',
       token,
-      user: { id: user._id, name: user.name, email: user.email, role: user.role },
+      user: { id: user._id, firstName: user.firstName, lastName: user.lastName, email: user.email, role: user.role },
     })
   } catch (err) {
     next(err)
@@ -57,7 +57,7 @@ export const login = async (req, res, next) => {
     res.json({
       message: 'Login successful',
       token,
-      user: { id: user._id, name: user.name, email: user.email, role: user.role },
+      user: { id: user._id, firstName: user.firstName, lastName: user.lastName,email: user.email, role: user.role },
     })
   } catch (err) {
     next(err)

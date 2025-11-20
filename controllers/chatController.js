@@ -27,7 +27,7 @@ export const createOrGetChat = async (req, res, next) => {
       isGroupChat: false,
       participants: { $all: [currentUserId, participantId] },
       $expr: { $eq: [{ $size: '$participants' }, 2] },
-    }).populate('participants', 'name email')
+    }).populate('participants', 'firstName lastName email')
 
     if (chat) {
       // Return existing chat
@@ -41,7 +41,7 @@ export const createOrGetChat = async (req, res, next) => {
     })
 
     // Populate participants
-    await chat.populate('participants', 'name email')
+    await chat.populate('participants', 'firstName lastName email')
 
     res.status(201).json(chat)
   } catch (err) {
@@ -56,13 +56,13 @@ export const getUserChats = async (req, res, next) => {
     const chats = await Chat.find({
       participants: currentUserId,
     })
-      .populate('participants', 'name email')
+      .populate('participants', 'firstName lastName email')
       .populate({
         path: 'lastMessage',
         select: 'content sender createdAt',
         populate: {
           path: 'sender',
-          select: 'name email',
+          select: 'firstName lastName email',
         },
       })
       .sort({ updatedAt: -1 })
@@ -75,7 +75,7 @@ export const getUserChats = async (req, res, next) => {
         chatObj.lastMessage = {
           ...chatObj.lastMessage,
           sender: chatObj.lastMessage.sender._id.toString(),
-          senderName: chatObj.lastMessage.sender.name,
+          senderName: `${chatObj.lastMessage.sender.firstName} ${chatObj.lastMessage.sender.lastName}`,
           senderEmail: chatObj.lastMessage.sender.email,
           timestamp: chatObj.lastMessage.createdAt,
         }
@@ -105,7 +105,7 @@ export const getChatMessages = async (req, res, next) => {
     }
 
     const messages = await Message.find({ chat: chatId })
-      .populate('sender', 'name email')
+      .populate('sender', 'firstName lastName email')
       .sort({ createdAt: 1 })
       .limit(100)
 
@@ -113,6 +113,8 @@ export const getChatMessages = async (req, res, next) => {
     const formattedMessages = messages.map(msg => ({
       _id: msg._id.toString(),
       sender: msg.sender._id.toString(),
+      senderName: `${msg.sender.firstName} ${msg.sender.lastName}`,
+      senderEmail: msg.sender.email,
       content: msg.content,
       timestamp: msg.createdAt,
       chatId: chatId,
@@ -159,7 +161,7 @@ export const createGroupChat = async (req, res, next) => {
     })
 
     // Populate participants
-    await chat.populate('participants', 'name email')
+    await chat.populate('participants', 'firstName lastName email')
 
     res.status(201).json(chat)
   } catch (err) {
@@ -248,7 +250,7 @@ export const removeParticipantFromGroup = async (req, res, next) => {
     )
     await chat.save()
 
-    await chat.populate('participants', 'name email')
+    await chat.populate('participants', 'firstName lastName email')
 
     res.json(chat)
   } catch (err) {
@@ -284,7 +286,7 @@ export const updateGroupName = async (req, res, next) => {
     chat.groupName = groupName.trim()
     await chat.save()
 
-    await chat.populate('participants', 'name email')
+    await chat.populate('participants', 'firstName lastName email')
 
     res.json(chat)
   } catch (err) {
