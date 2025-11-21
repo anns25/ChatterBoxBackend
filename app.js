@@ -7,6 +7,7 @@ import connectDB from './config/db.js'
 import authRoutes from './routes/authRoutes.js'
 import userRoutes from './routes/userRoutes.js'
 import chatRoutes from './routes/chatRoutes.js'
+import aiRoutes from './routes/aiRoutes.js'
 import createHttpError from 'http-errors'
 import cors from 'cors'
 import { initializeSocket } from './socket/socketServer.js'
@@ -39,6 +40,7 @@ app.get('/', (req, res) => {
 app.use('/api/auth', authRoutes)
 app.use('/api/users', userRoutes)
 app.use('/api/chats', chatRoutes)
+app.use('/api/ai', aiRoutes)
 
 app.use((req, res, next) => {
   next(createHttpError(404, 'Route not found'))

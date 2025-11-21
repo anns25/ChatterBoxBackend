@@ -98,38 +98,50 @@ export const searchUsers = async (req, res, next) => {
     const { q } = req.query
     const currentUserId = req.user._id.toString()
 
+    let users
+
     // If no query, return all users (excluding current user)
     if (!q || q.trim().length === 0) {
-      const allUsers = await User.find({
-        _id: { $ne: currentUserId }, // Exclude current user
+      users = await User.find({
+        _id: { $ne: currentUserId },
       })
-        .select('firstName lastName email role profilePicture _id') // Explicitly select fields
-        .limit(50) // Limit results to 50
-        .sort({ firstName: 1, lastName: 1 }) // Sort alphabetically by name
+        .select('firstName lastName email role profilePicture _id')
+        .limit(50)
+        .sort({ firstName: 1, lastName: 1 })
+    } else {
+      const searchQuery = q.trim()
 
-      return res.json(allUsers)
+      // Search by firstName, lastName, or email (case-insensitive)
+      users = await User.find({
+        $and: [
+          { _id: { $ne: currentUserId } },
+          {
+            $or: [
+              { firstName: { $regex: searchQuery, $options: 'i' } },
+              { lastName: { $regex: searchQuery, $options: 'i' } },
+              { email: { $regex: searchQuery, $options: 'i' } },
+            ],
+          },
+        ],
+      })
+        .select('firstName lastName email role profilePicture _id')
+        .limit(20)
+        .sort({ firstName: 1, lastName: 1 })
     }
 
-    const searchQuery = q.trim()
+    // Format users with full profilePicture URLs
+    const formattedUsers = users.map(user => ({
+      _id: user._id,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      email: user.email,
+      role: user.role,
+      profilePicture: user.profilePicture 
+        ? `${req.protocol}://${req.get('host')}${user.profilePicture}`
+        : null,
+    }))
 
-    // Search by firstName, lastName, or email (case-insensitive)
-    const users = await User.find({
-      $and: [
-        { _id: { $ne: currentUserId } }, // Exclude current user
-        {
-          $or: [
-            { firstName: { $regex: searchQuery, $options: 'i' } },
-            { lastName: { $regex: searchQuery, $options: 'i' } },
-            { email: { $regex: searchQuery, $options: 'i' } },
-          ],
-        },
-      ],
-    })
-      .select('firstName lastName email role profilePicture _id') // Explicitly select fields
-      .limit(20) // Limit results to 20
-      .sort({ firstName: 1, lastName: 1 }) // Sort alphabetically by name
-
-    res.json(users)
+    res.json(formattedUsers)
   } catch (err) {
     next(err)
   }
