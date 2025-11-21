@@ -56,13 +56,13 @@ export const getUserChats = async (req, res, next) => {
     const chats = await Chat.find({
       participants: currentUserId,
     })
-      .populate('participants', 'firstName lastName email')
+      .populate('participants', 'firstName lastName email profilePicture')
       .populate({
         path: 'lastMessage',
         select: 'content sender createdAt',
         populate: {
           path: 'sender',
-          select: 'firstName lastName email',
+          select: 'firstName lastName email profilePicture',
         },
       })
       .sort({ updatedAt: -1 })
@@ -71,6 +71,16 @@ export const getUserChats = async (req, res, next) => {
     // Format chats to include timestamp in lastMessage
     const formattedChats = chats.map(chat => {
       const chatObj = chat.toObject()
+
+      if (chatObj.participants) {
+        chatObj.participants = chatObj.participants.map(participant => ({
+          ...participant,
+          _id: participant._id.toString(),
+          profilePicture: participant.profilePicture 
+            ? `${req.protocol}://${req.get('host')}${participant.profilePicture}`
+            : null,
+        }))
+      }
       if (chatObj.lastMessage) {
         chatObj.lastMessage = {
           ...chatObj.lastMessage,
@@ -105,7 +115,7 @@ export const getChatMessages = async (req, res, next) => {
     }
 
     const messages = await Message.find({ chat: chatId })
-      .populate('sender', 'firstName lastName email')
+      .populate('sender', 'firstName lastName email profilePicture')
       .sort({ createdAt: 1 })
       .limit(100)
 

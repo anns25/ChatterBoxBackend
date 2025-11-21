@@ -1,6 +1,8 @@
 import express from 'express'
 import { createServer } from 'http'
 import dotenv from 'dotenv'
+import path from 'path'
+import { fileURLToPath } from 'url'
 import connectDB from './config/db.js'
 import authRoutes from './routes/authRoutes.js'
 import userRoutes from './routes/userRoutes.js'
@@ -8,6 +10,9 @@ import chatRoutes from './routes/chatRoutes.js'
 import createHttpError from 'http-errors'
 import cors from 'cors'
 import { initializeSocket } from './socket/socketServer.js'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 
 dotenv.config()
 
@@ -24,6 +29,8 @@ app.use(cors({
 }))
 
 app.use(express.json())
+app.use(express.urlencoded({ extended: true }))
+app.use('/uploads', express.static(path.join(__dirname, 'public', 'uploads')))
 
 app.get('/', (req, res) => {
   res.send('ChatterBox API is running 🚀')

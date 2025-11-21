@@ -1,5 +1,97 @@
+import path from 'path'
+import fs from 'fs'
+import { fileURLToPath } from 'url'
 import createHttpError from 'http-errors'
 import User from '../models/User.js'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+
+export const uploadProfilePicture = async (req, res, next) => {
+  try {
+    if (!req.file) {
+      throw createHttpError(400, 'No file uploaded')
+    }
+
+    const userId = req.user._id
+    const user = await User.findById(userId)
+
+    if (!user) {
+      throw createHttpError(404, 'User not found')
+    }
+
+    // Delete old profile picture if it exists
+    if (user.profilePicture) {
+      const oldPicturePath = path.join(__dirname, '../public', user.profilePicture);
+      if (fs.existsSync(oldPicturePath)) {
+        fs.unlinkSync(oldPicturePath)
+      }
+    }
+
+    // Update user with new profile picture URL
+    const profilePictureUrl = `/uploads/${req.file.filename}`
+    user.profilePicture = profilePictureUrl
+    await user.save()
+
+    res.json({
+      _id: user._id,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      email: user.email,
+      role: user.role,
+      profilePicture: user.profilePicture 
+        ? `${req.protocol}://${req.get('host')}${user.profilePicture}`
+        : null,
+      createdAt: user.createdAt,
+      lastLoginAt: user.lastLoginAt,
+    })
+  } catch (err) {
+    // Delete uploaded file if there's an error
+    if (req.file) {
+      const filePath = path.join(__dirname, '../public/uploads', req.file.filename)
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath)
+      }
+    }
+    next(err)
+  }
+}
+
+export const deleteProfilePicture = async (req, res, next) => {
+  try {
+    const userId = req.user._id
+    const user = await User.findById(userId)
+
+    if (!user) {
+      throw createHttpError(404, 'User not found')
+    }
+
+    // Delete the file if it exists
+    if (user.profilePicture) {
+      const picturePath = path.join(__dirname, '../public', user.profilePicture)
+      if (fs.existsSync(picturePath)) {
+        fs.unlinkSync(picturePath)
+      }
+    }
+
+    // Remove profile picture from user
+    user.profilePicture = null
+    await user.save()
+
+    res.json({
+      _id: user._id,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      email: user.email,
+      role: user.role,
+      profilePicture: null,
+      createdAt: user.createdAt,
+      lastLoginAt: user.lastLoginAt,
+    })
+  } catch (err) {
+    next(err)
+  }
+}
 
 export const searchUsers = async (req, res, next) => {
   try {
@@ -59,7 +151,9 @@ export const getUserById = async (req, res, next) => {
       lastName: user.lastName,
       email: user.email,
       role: user.role,
-      profilePicture: user.profilePicture,
+      profilePicture: user.profilePicture 
+      ? `${req.protocol}://${req.get('host')}${user.profilePicture}`
+      : null,
       createdAt: user.createdAt,
       lastLoginAt: user.lastLoginAt,
     })
@@ -93,7 +187,9 @@ export const updateProfile = async (req, res, next) => {
       lastName: updatedUser.lastName,
       email: updatedUser.email,
       role: updatedUser.role,
-      profilePicture: updatedUser.profilePicture,
+      profilePicture: user.profilePicture 
+      ? `${req.protocol}://${req.get('host')}${user.profilePicture}`
+      : null,
       createdAt: updatedUser.createdAt,
       lastLoginAt: updatedUser.lastLoginAt,
     })
