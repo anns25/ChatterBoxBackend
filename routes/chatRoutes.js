@@ -8,6 +8,7 @@ const router = Router()
 router.use(protect)
 
 router.post('/', createOrGetChat)
+router.get('/admin-groups', getUserAdminGroups)
 router.get('/', getUserChats)
 router.get('/:chatId/messages', getChatMessages)
 
