@@ -21,6 +21,14 @@ const chatSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
+    groupPicture: {
+      type: String,
+      default: null,
+    },
+    admin: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+    },
   },
   { timestamps: true }
 )
@@ -28,6 +36,7 @@ const chatSchema = new mongoose.Schema(
 // Index for faster queries
 chatSchema.index({ participants: 1 })
 chatSchema.index({ updatedAt: -1 })
+chatSchema.index({ admin: 1 }) // Index for admin queries
 
 const Chat = mongoose.model('Chat', chatSchema)
 export default Chat

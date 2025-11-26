@@ -18,10 +18,12 @@ const storage = multer.diskStorage({
     cb(null, uploadsDir)
   },
   filename: (req, file, cb) => {
-    // Generate unique filename: userId-timestamp.extension
+    // Generate unique filename: type-timestamp-random.extension
     const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1E9)}`
     const ext = path.extname(file.originalname)
-    cb(null, `profile-${uniqueSuffix}${ext}`)
+    // Determine file type based on field name
+    const prefix = file.fieldname === 'groupPicture' ? 'group' : 'profile'
+    cb(null, `${prefix}-${uniqueSuffix}${ext}`)
   },
 })
 
@@ -45,5 +47,3 @@ const upload = multer({
 })
 
 export default upload
-
-//export const uploadProfilePicture = upload.single('profilePicture')
