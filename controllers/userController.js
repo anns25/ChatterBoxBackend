@@ -1,11 +1,6 @@
-import path from 'path'
-import fs from 'fs'
-import { fileURLToPath } from 'url'
 import createHttpError from 'http-errors'
 import User from '../models/User.js'
-
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = path.dirname(__filename)
+import { uploadToCloudinary, deleteFromCloudinary, extractPublicIdFromUrl } from '../utils/cloudinaryUpload.js'
 
 export const uploadProfilePicture = async (req, res, next) => {
   try {
@@ -20,17 +15,23 @@ export const uploadProfilePicture = async (req, res, next) => {
       throw createHttpError(404, 'User not found')
     }
 
-    // Delete old profile picture if it exists
+    // Delete old profile picture from Cloudinary if it exists
     if (user.profilePicture) {
-      const oldPicturePath = path.join(__dirname, '../public', user.profilePicture);
-      if (fs.existsSync(oldPicturePath)) {
-        fs.unlinkSync(oldPicturePath)
+      const oldPublicId = extractPublicIdFromUrl(user.profilePicture)
+      if (oldPublicId) {
+        await deleteFromCloudinary(oldPublicId)
       }
     }
 
+    // Upload new picture to Cloudinary
+    const { url, public_id } = await uploadToCloudinary(
+      req.file.buffer,
+      'profile-pictures',
+      `user-${userId}`
+    )
+
     // Update user with new profile picture URL
-    const profilePictureUrl = `/uploads/${req.file.filename}`
-    user.profilePicture = profilePictureUrl
+    user.profilePicture = url
     await user.save()
 
     res.json({
@@ -39,20 +40,11 @@ export const uploadProfilePicture = async (req, res, next) => {
       lastName: user.lastName,
       email: user.email,
       role: user.role,
-      profilePicture: user.profilePicture 
-        ? `${req.protocol}://${req.get('host')}${user.profilePicture}`
-        : null,
+      profilePicture: user.profilePicture,
       createdAt: user.createdAt,
       lastLoginAt: user.lastLoginAt,
     })
   } catch (err) {
-    // Delete uploaded file if there's an error
-    if (req.file) {
-      const filePath = path.join(__dirname, '../public/uploads', req.file.filename)
-      if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath)
-      }
-    }
     next(err)
   }
 }
@@ -66,11 +58,11 @@ export const deleteProfilePicture = async (req, res, next) => {
       throw createHttpError(404, 'User not found')
     }
 
-    // Delete the file if it exists
+    // Delete from Cloudinary if it exists
     if (user.profilePicture) {
-      const picturePath = path.join(__dirname, '../public', user.profilePicture)
-      if (fs.existsSync(picturePath)) {
-        fs.unlinkSync(picturePath)
+      const publicId = extractPublicIdFromUrl(user.profilePicture)
+      if (publicId) {
+        await deleteFromCloudinary(publicId)
       }
     }
 
@@ -100,7 +92,6 @@ export const searchUsers = async (req, res, next) => {
 
     let users
 
-    // If no query, return all users (excluding current user)
     if (!q || q.trim().length === 0) {
       users = await User.find({
         _id: { $ne: currentUserId },
@@ -110,8 +101,6 @@ export const searchUsers = async (req, res, next) => {
         .sort({ firstName: 1, lastName: 1 })
     } else {
       const searchQuery = q.trim()
-
-      // Search by firstName, lastName, or email (case-insensitive)
       users = await User.find({
         $and: [
           { _id: { $ne: currentUserId } },
@@ -129,16 +118,14 @@ export const searchUsers = async (req, res, next) => {
         .sort({ firstName: 1, lastName: 1 })
     }
 
-    // Format users with full profilePicture URLs
+    // Format users - Cloudinary URLs are already full URLs
     const formattedUsers = users.map(user => ({
       _id: user._id,
       firstName: user.firstName,
       lastName: user.lastName,
       email: user.email,
       role: user.role,
-      profilePicture: user.profilePicture 
-        ? `${req.protocol}://${req.get('host')}${user.profilePicture}`
-        : null,
+      profilePicture: user.profilePicture || null,
     }))
 
     res.json(formattedUsers)
@@ -150,7 +137,6 @@ export const searchUsers = async (req, res, next) => {
 export const getUserById = async (req, res, next) => {
   try {
     const { id } = req.params
-
     const user = await User.findById(id).select('-password')
 
     if (!user) {
@@ -163,9 +149,7 @@ export const getUserById = async (req, res, next) => {
       lastName: user.lastName,
       email: user.email,
       role: user.role,
-      profilePicture: user.profilePicture 
-      ? `${req.protocol}://${req.get('host')}${user.profilePicture}`
-      : null,
+      profilePicture: user.profilePicture || null,
       createdAt: user.createdAt,
       lastLoginAt: user.lastLoginAt,
     })
@@ -179,7 +163,6 @@ export const updateProfile = async (req, res, next) => {
     const { firstName, lastName, email } = req.body
     const userId = req.user._id
 
-    // Check if email is being changed and if it's already taken
     if (email && email !== req.user.email) {
       const existingUser = await User.findOne({ email })
       if (existingUser) {
@@ -195,13 +178,11 @@ export const updateProfile = async (req, res, next) => {
 
     res.json({
       _id: updatedUser._id,
-      firstName: updatedUser.firstName, // Fixed: was updatedUser.name
+      firstName: updatedUser.firstName,
       lastName: updatedUser.lastName,
       email: updatedUser.email,
       role: updatedUser.role,
-      profilePicture: user.profilePicture 
-      ? `${req.protocol}://${req.get('host')}${user.profilePicture}`
-      : null,
+      profilePicture: updatedUser.profilePicture || null,
       createdAt: updatedUser.createdAt,
       lastLoginAt: updatedUser.lastLoginAt,
     })
@@ -215,7 +196,6 @@ export const changePassword = async (req, res, next) => {
     const { currentPassword, newPassword } = req.body
     const userId = req.user._id
 
-    // Validation
     if (!currentPassword || !newPassword) {
       throw createHttpError(400, 'Please provide both current and new password')
     }
@@ -226,20 +206,17 @@ export const changePassword = async (req, res, next) => {
       throw createHttpError(400, 'New password cannot be the same as the current password')
     }
 
-    // Get user with password
     const user = await User.findById(userId).select('+password')
 
     if (!user) {
       throw createHttpError(404, 'User not found')
     }
 
-    // Verify current password
     const isMatch = await user.matchPassword(currentPassword)
     if (!isMatch) {
       throw createHttpError(401, 'Current password is incorrect')
     }
 
-    // Update password
     user.password = newPassword
     await user.save()
 
