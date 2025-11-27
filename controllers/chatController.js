@@ -76,9 +76,7 @@ export const getUserChats = async (req, res, next) => {
         chatObj.participants = chatObj.participants.map(participant => ({
           ...participant,
           _id: participant._id.toString(),
-          profilePicture: participant.profilePicture 
-            ? `${req.protocol}://${req.get('host')}${participant.profilePicture}`
-            : null,
+          profilePicture: participant.profilePicture || null,
         }))
       }
       if (chatObj.lastMessage) {
@@ -140,17 +138,14 @@ export const getChatMessages = async (req, res, next) => {
 
 export const createGroupChat = async (req, res, next) => {
   try {
-    // Access fields from req.body (multer parses FormData text fields)
     const groupName = req.body?.groupName
     const participantIds = req.body?.participantIds
-    
     const currentUserId = req.user._id.toString()
 
     if (!groupName || !groupName.trim()) {
       throw createHttpError(400, 'Group name is required')
     }
 
-    // Parse participantIds if it's a string (from FormData)
     let parsedParticipantIds = participantIds
     if (typeof participantIds === 'string') {
       try {
@@ -164,24 +159,26 @@ export const createGroupChat = async (req, res, next) => {
       throw createHttpError(400, 'At least one participant is required')
     }
 
-    // Add current user to participants
     const allParticipants = [currentUserId, ...parsedParticipantIds]
-
-    // Remove duplicates
     const uniqueParticipants = [...new Set(allParticipants)]
 
-    // Verify all participants exist
     const users = await User.find({ _id: { $in: uniqueParticipants } })
     if (users.length !== uniqueParticipants.length) {
       throw createHttpError(400, 'One or more participants not found')
     }
 
-    // Get the uploaded file URL if present
-    const groupPicture = req.file 
-      ? `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`
-      : undefined
+    // Upload group picture to Cloudinary if provided
+    let groupPicture = undefined
+    if (req.file) {
+      const { uploadToCloudinary } = await import('../utils/cloudinaryUpload.js')
+      const { url } = await uploadToCloudinary(
+        req.file.buffer,
+        'group-pictures',
+        `group-${Date.now()}-${Math.round(Math.random() * 1E9)}`
+      )
+      groupPicture = url
+    }
 
-    // Create group chat
     const chat = await Chat.create({
       participants: uniqueParticipants,
       isGroupChat: true,
@@ -190,7 +187,6 @@ export const createGroupChat = async (req, res, next) => {
       groupPicture: groupPicture,
     })
 
-    // Populate participants
     await chat.populate('participants', 'firstName lastName email profilePicture')
     await chat.populate('admin', 'firstName lastName email profilePicture')
 
@@ -223,14 +219,8 @@ export const getUserAdminGroups = async (req, res, next) => {
         groupObj.participants = groupObj.participants.map(participant => ({
           ...participant,
           _id: participant._id.toString(),
-          profilePicture: participant.profilePicture 
-            ? `${req.protocol}://${req.get('host')}${participant.profilePicture}`
-            : null,
+          profilePicture: participant.profilePicture || null,
         }))
-      }
-      
-      if (groupObj.groupPicture && !groupObj.groupPicture.startsWith('http')) {
-        groupObj.groupPicture = `${req.protocol}://${req.get('host')}${groupObj.groupPicture}`
       }
       
       if (groupObj.admin) {
@@ -374,9 +364,6 @@ export const updateGroupName = async (req, res, next) => {
 
     // Format group picture URL if needed
     const groupObj = chat.toObject()
-    if (groupObj.groupPicture && !groupObj.groupPicture.startsWith('http')) {
-      groupObj.groupPicture = `${req.protocol}://${req.get('host')}${groupObj.groupPicture}`
-    }
 
     res.json(groupObj)
   } catch (err) {
@@ -389,7 +376,6 @@ export const updateGroupPicture = async (req, res, next) => {
     const { chatId } = req.params
     const currentUserId = req.user._id.toString()
 
-    // Find chat and verify it's a group chat
     const chat = await Chat.findById(chatId)
     if (!chat) {
       throw createHttpError(404, 'Chat not found')
@@ -399,7 +385,6 @@ export const updateGroupPicture = async (req, res, next) => {
       throw createHttpError(400, 'This is not a group chat')
     }
 
-    // Verify current user is the admin
     if (chat.admin.toString() !== currentUserId) {
       throw createHttpError(403, 'Only group admin can update group picture')
     }
@@ -408,26 +393,24 @@ export const updateGroupPicture = async (req, res, next) => {
       throw createHttpError(400, 'No image file provided')
     }
 
-    // Get the uploaded file URL
-    const groupPicture = `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`
-
-    // Delete old picture if it exists
+    // Delete old picture from Cloudinary if it exists
     if (chat.groupPicture) {
-      const fs = await import('fs')
-      const path = await import('path')
-      const { fileURLToPath } = await import('url')
-      const __filename = fileURLToPath(import.meta.url)
-      const __dirname = path.dirname(__filename)
-      
-      const oldPicturePath = chat.groupPicture.replace(`${req.protocol}://${req.get('host')}`, '')
-      const fullPath = path.join(__dirname, '..', 'public', oldPicturePath)
-      
-      if (fs.existsSync(fullPath)) {
-        fs.unlinkSync(fullPath)
+      const { deleteFromCloudinary, extractPublicIdFromUrl } = await import('../utils/cloudinaryUpload.js')
+      const oldPublicId = extractPublicIdFromUrl(chat.groupPicture)
+      if (oldPublicId) {
+        await deleteFromCloudinary(oldPublicId)
       }
     }
 
-    chat.groupPicture = groupPicture
+    // Upload new picture to Cloudinary
+    const { uploadToCloudinary } = await import('../utils/cloudinaryUpload.js')
+    const { url } = await uploadToCloudinary(
+      req.file.buffer,
+      'group-pictures',
+      `group-${chatId}-${Date.now()}`
+    )
+
+    chat.groupPicture = url
     await chat.save()
 
     await chat.populate('participants', 'firstName lastName email profilePicture')
@@ -445,7 +428,6 @@ export const deleteGroupPicture = async (req, res, next) => {
     const { chatId } = req.params
     const currentUserId = req.user._id.toString()
 
-    // Find chat and verify it's a group chat
     const chat = await Chat.findById(chatId)
     if (!chat) {
       throw createHttpError(404, 'Chat not found')
@@ -455,7 +437,6 @@ export const deleteGroupPicture = async (req, res, next) => {
       throw createHttpError(400, 'This is not a group chat')
     }
 
-    // Verify current user is the admin
     if (chat.admin.toString() !== currentUserId) {
       throw createHttpError(403, 'Only group admin can delete group picture')
     }
@@ -464,18 +445,11 @@ export const deleteGroupPicture = async (req, res, next) => {
       return res.json({ message: 'Group has no picture to delete', chat })
     }
 
-    // Delete the file from filesystem
-    const fs = await import('fs')
-    const path = await import('path')
-    const { fileURLToPath } = await import('url')
-    const __filename = fileURLToPath(import.meta.url)
-    const __dirname = path.dirname(__filename)
-    
-    const picturePath = chat.groupPicture.replace(`${req.protocol}://${req.get('host')}`, '')
-    const fullPath = path.join(__dirname, '..', 'public', picturePath)
-    
-    if (fs.existsSync(fullPath)) {
-      fs.unlinkSync(fullPath)
+    // Delete from Cloudinary
+    const { deleteFromCloudinary, extractPublicIdFromUrl } = await import('../utils/cloudinaryUpload.js')
+    const publicId = extractPublicIdFromUrl(chat.groupPicture)
+    if (publicId) {
+      await deleteFromCloudinary(publicId)
     }
 
     chat.groupPicture = null
